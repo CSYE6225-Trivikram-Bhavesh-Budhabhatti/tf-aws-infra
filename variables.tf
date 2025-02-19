@@ -12,7 +12,7 @@ variable "vpc_cidr" {
 variable "subnet_cidr" {
   description = "CIDR block for the subnets"
   default     = "10.0.0.0/24"
-}
+} 
 
 variable "availability_zones" {
   description = "List of availability zones"
