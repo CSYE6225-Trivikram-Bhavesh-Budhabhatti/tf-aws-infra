@@ -1,7 +1,7 @@
 # variables.tf
 variable "region" {
   description = "AWS Region"
-  default     = "us-west-2"  # You can change this to your desired region
+  default     = "us-west-2" # You can change this to your desired region
 }
 
 variable "vpc_cidr" {
@@ -12,7 +12,7 @@ variable "vpc_cidr" {
 variable "subnet_cidr" {
   description = "CIDR block for the subnets"
   default     = "10.0.0.0/24"
-} 
+}
 
 variable "availability_zones" {
   description = "List of availability zones"
