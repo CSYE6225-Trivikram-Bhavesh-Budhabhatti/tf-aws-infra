@@ -21,7 +21,7 @@ resource "aws_internet_gateway" "main_igw" {
 
 # Public subnets
 resource "aws_subnet" "public_subnet_a" {
-  vpc_id                  = aws_vpc.main_vpc.id
+  vpc_id                  =          aws_vpc.main_vpc.id
   cidr_block              = var.public_subnet_cidrs[0]
   availability_zone       = var.availability_zones[0]
   map_public_ip_on_launch = true
