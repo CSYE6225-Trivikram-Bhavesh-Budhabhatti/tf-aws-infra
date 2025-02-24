@@ -8,7 +8,7 @@ cd tf-aws-infra
 
 ## Configure your AWS credentials
 Make sure AWS CLI is configured on your local machine using the following command:
-
+    
 ```bash
 aws configure
 ```
