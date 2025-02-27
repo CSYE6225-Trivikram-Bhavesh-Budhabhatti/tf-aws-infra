@@ -65,3 +65,28 @@ variable "private_subnet_name" {
   type        = list(string)
   default     = ["private-subnet-a", "private-subnet-b", "private-subnet-c"]
 }
+variable "aws_ami_id" {
+  description = "aws ami id"
+  type        = string
+  default     = "ami-0ddc07efd780029fb"
+}
+variable "aws_instance_type" {
+  description = "instance type"
+  type        = string
+  default     = "t2.micro"
+}
+variable "aws_volume_size" {
+  description = "name for private subnet"
+  type        = string
+  default     = "25"
+}
+variable "aws_volume_type" {
+  description = "name for private subnet"
+  type        = string
+  default     = "gp2"
+}
+variable "aws_key_name" {
+  description = "name for private subnet"
+  type        = string
+  default     = "aws-demo"
+}
