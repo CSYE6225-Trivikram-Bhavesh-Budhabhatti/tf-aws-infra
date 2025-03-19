@@ -68,7 +68,7 @@ variable "private_subnet_name" {
 variable "aws_ami_id" {
   description = "aws ami id"
   type        = string
-  default     = "ami-0ddc07efd780029fb"
+  default     = "ami-0ecded31247e89108"
 }
 variable "aws_instance_type" {
   description = "instance type"
@@ -88,5 +88,24 @@ variable "aws_volume_type" {
 variable "aws_key_name" {
   description = "name for private subnet"
   type        = string
-  default     = "aws-demo"
+  default     = "aws-dev"
+}
+variable "DB_USER" {
+  type    = string
+  default = "csye6225"
+}
+
+variable "DB_PASSWORD" {
+  type    = string
+  default = "Psqlforrds!01"
+}
+
+variable "DB_NAME" {
+  type    = string
+  default = "csye6225"
+}
+
+variable "S3_REGION" {
+  type    = string
+  default = "us-east-1"
 }
