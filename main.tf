@@ -177,7 +177,7 @@ resource "aws_security_group" "app_sg" {
 }
 
 # IAM Role for EC2 Instance
-resource "aws_iam_role" "ec2_s3_access_role" {
+resource "aws_iam_role" "ec2_s3_cloudwatch_access_role" {
   name = "ec2-s3-access-role"
 
   assume_role_policy = jsonencode({
@@ -196,14 +196,14 @@ resource "aws_iam_role" "ec2_s3_access_role" {
 
 # Attach S3 Access Policy to IAM Role
 resource "aws_iam_role_policy_attachment" "s3_access_attachment" {
-  role       = aws_iam_role.ec2_s3_access_role.name
-  policy_arn = aws_iam_policy.s3_access_policy.arn
+  role       = aws_iam_role.ec2_s3_cloudwatch_access_role.name
+  policy_arn = aws_iam_policy.s3_cloudwatch_access_policy.arn
 }
 
 # IAM Instance Profile
 resource "aws_iam_instance_profile" "ec2_s3_access_profile" {
   name = "ec2-s3-access-profile"
-  role = aws_iam_role.ec2_s3_access_role.name
+  role = aws_iam_role.ec2_s3_cloudwatch_access_role.name
 }
 
 resource "random_uuid" "bucket_uuid" {}
@@ -237,7 +237,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "bucket_lifecycle" {
 }
 
 # IAM Policy for S3 Access
-resource "aws_iam_policy" "s3_access_policy" {
+resource "aws_iam_policy" "s3_cloudwatch_access_policy" {
   name        = "s3-access-policy"
   description = "Policy to allow access to S3 bucket"
   policy = jsonencode({
@@ -257,6 +257,19 @@ resource "aws_iam_policy" "s3_access_policy" {
         Effect   = "Allow"
         Action   = "s3:GetBucketPolicy"
         Resource = "arn:aws:s3:::${aws_s3_bucket.webapp_bucket.bucket}"
+      },
+      {
+        Effect = "Allow",
+        Action = [
+          "cloudwatch:PutMetricData",
+          "cloudwatch:GetMetricStatistics",
+          "cloudwatch:ListMetrics",
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "logs:DescribeLogStreams",
+        ],
+        Resource = "*"
       }
     ]
   })
@@ -282,6 +295,12 @@ resource "aws_instance" "app_instance" {
               S3_BUCKET_NAME=${aws_s3_bucket.webapp_bucket.bucket}
               S3_REGION=${var.region}
               EOL
+              sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+              -a fetch-config \
+              -m ec2 \
+              -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+              sudo systemctl start amazon-cloudwatch-agent
+              sudo systemctl enable amazon-cloudwatch-agent
               systemctl enable csye6225-flask-webapp.service
               sudo systemctl restart csye6225-flask-webapp.service
               EOF
