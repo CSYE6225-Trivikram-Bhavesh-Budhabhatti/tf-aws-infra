@@ -275,7 +275,7 @@ resource "aws_iam_instance_profile" "ec2_s3_access_profile" {
 resource "random_uuid" "bucket_uuid" {}
 
 resource "aws_s3_bucket" "webapp_bucket" {
-  bucket = random_uuid.bucket_uuid.result
+  bucket        = random_uuid.bucket_uuid.result
   force_destroy = true
 }
 
@@ -350,7 +350,7 @@ resource "aws_lb" "web_app_lb" {
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.load_balancer_sg.id]
-  subnets            = [
+  subnets = [
     aws_subnet.public_subnet_a.id,
     aws_subnet.public_subnet_b.id,
     aws_subnet.public_subnet_c.id
@@ -359,10 +359,10 @@ resource "aws_lb" "web_app_lb" {
 }
 
 resource "aws_lb_target_group" "web_app_tg" {
-  name     = "csye6225-web-app-tg"
-  port     = 8080
-  protocol = "HTTP"
-  vpc_id   = aws_vpc.main_vpc.id
+  name        = "csye6225-web-app-tg"
+  port        = 8080
+  protocol    = "HTTP"
+  vpc_id      = aws_vpc.main_vpc.id
   target_type = "instance"
 
   health_check {
@@ -392,25 +392,25 @@ resource "aws_launch_template" "web_app_lt" {
   image_id      = var.aws_ami_id
   instance_type = var.aws_instance_type
   key_name      = var.aws_key_name
-  
+
   network_interfaces {
     associate_public_ip_address = true
     security_groups             = [aws_security_group.app_sg.id]
   }
-  
+
   iam_instance_profile {
     name = aws_iam_instance_profile.ec2_s3_access_profile.name
   }
-  
+
   block_device_mappings {
     device_name = "/dev/sda1"
     ebs {
-      volume_size = var.aws_volume_size
-      volume_type = var.aws_volume_type
+      volume_size           = var.aws_volume_size
+      volume_type           = var.aws_volume_type
       delete_on_termination = true
     }
   }
-  
+
   user_data = base64encode(<<-EOF
               #!/bin/bash
               cat > /opt/csye6225/webapp/.env << EOL
@@ -436,28 +436,28 @@ resource "aws_launch_template" "web_app_lt" {
 
 # Auto Scaling Group
 resource "aws_autoscaling_group" "web_app_asg" {
-  name                = "csye6225-web-app-asg"
-  min_size            = 3
-  max_size            = 5
-  desired_capacity    = 3
-  health_check_type   = "ELB"
+  name              = "csye6225-web-app-asg"
+  min_size          = 3
+  max_size          = 5
+  desired_capacity  = 3
+  health_check_type = "ELB"
   vpc_zone_identifier = [
     aws_subnet.public_subnet_a.id,
     aws_subnet.public_subnet_b.id,
     aws_subnet.public_subnet_c.id
   ]
-  
+
   launch_template {
     id      = aws_launch_template.web_app_lt.id
     version = "$Latest"
   }
-  
+
   tag {
     key                 = "Name"
     value               = "csye6225-flask-webapp-instance"
     propagate_at_launch = true
   }
-  
+
   target_group_arns = [aws_lb_target_group.web_app_tg.arn]
 }
 
@@ -513,7 +513,7 @@ resource "aws_cloudwatch_metric_alarm" "low_cpu" {
 
 # RDS Configuration
 data "aws_rds_engine_version" "latest_postgres" {
-  engine = "postgres"
+  engine  = "postgres"
   version = "17.4"
 }
 
