@@ -109,3 +109,13 @@ variable "S3_REGION" {
   type    = string
   default = "us-east-1"
 }
+
+variable "domain_name" {
+  type    = string
+  default = "dev.trivikrambudhabhatti.me"
+}
+
+variable "subdomain" {
+  type    = string
+  default = "dev.trivikrambudhabhatti.me"
+}
