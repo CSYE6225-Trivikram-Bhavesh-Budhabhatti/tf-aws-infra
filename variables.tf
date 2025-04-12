@@ -112,10 +112,15 @@ variable "S3_REGION" {
 
 variable "domain_name" {
   type    = string
-  default = "dev.trivikrambudhabhatti.me"
+  default = "demo.trivikrambudhabhatti.me"
 }
 
 variable "subdomain" {
   type    = string
-  default = "dev.trivikrambudhabhatti.me"
+  default = "demo.trivikrambudhabhatti.me"
+}
+
+variable "demo_certificate_arn" {
+  type    = string
+  default = "arn:aws:acm:us-east-1:831926586812:certificate/30af328e-36c8-48a1-928a-bb6937090b8e"
 }

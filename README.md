@@ -69,3 +69,15 @@ terraform destroy
 - private_route_table_name: Name tag for the private route table.
 Optional Variables (Customizable):
 You can modify any other variables in terraform.tfvars to suit your specific infrastructure requirements.
+
+
+## Command to import certificate
+
+```bash
+aws acm import-certificate \
+  --certificate fileb://demo1.pem \                                    
+  --private-key fileb://demo.trivikrambudhabhatti.me.key \
+  --certificate-chain fileb://demo_trivikrambudhabhatti_me.ca-bundle \
+  --region us-east-1
+
+```

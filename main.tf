@@ -1,7 +1,116 @@
+# main.tf
 provider "aws" {
   region  = var.region
   profile = var.aws_profile
 }
+
+# Generate unique suffix for KMS keys
+resource "random_id" "kms_suffix" {
+  byte_length = 4
+}
+
+resource "random_password" "db_password" {
+  length  = 16
+  special = false
+}
+
+locals {
+  key_suffix = "csye6225-${random_id.kms_suffix.hex}"
+}
+
+data "aws_caller_identity" "current" {}
+resource "aws_kms_key" "ec2_key" {
+  description             = "ec2-key-${local.key_suffix}"
+  enable_key_rotation     = true
+  deletion_window_in_days = 30
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Id      = "key-default-1",
+    Statement = [
+      {
+        Sid    = "Enable IAM User Permissions",
+        Effect = "Allow",
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        },
+        Action   = "kms:*",
+        Resource = "*"
+      },
+      {
+        Sid    = "Allow service-linked role use of the CMK",
+        Effect = "Allow",
+        Principal = {
+          AWS = [
+            "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+          ]
+        },
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey",
+          "kms:CreateGrant"
+        ],
+        Resource = "*"
+      },
+      {
+        Sid    = "Allow attachment of persistent resources",
+        Effect = "Allow",
+        Principal = {
+          AWS = [
+            "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+          ]
+        },
+        Action = [
+          "kms:CreateGrant"
+        ],
+        Resource = "*",
+        Condition = {
+          Bool = {
+            "kms:GrantIsForAWSResource" = "true"
+          }
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Assignment = "csye6225"
+  }
+}
+
+
+resource "aws_kms_key" "rds_key" {
+  description             = "rds-key-${local.key_suffix}"
+  enable_key_rotation     = true
+  deletion_window_in_days = 30
+}
+
+resource "aws_kms_key" "s3_key" {
+  description             = "s3-key-${local.key_suffix}"
+  enable_key_rotation     = true
+  deletion_window_in_days = 30
+}
+
+resource "aws_kms_key" "secrets_key" {
+  description             = "secrets-key-${local.key_suffix}"
+  enable_key_rotation     = true
+  deletion_window_in_days = 30
+}
+
+# Secrets Manager 
+resource "aws_secretsmanager_secret" "db_password" {
+  name       = "csye6225-db-password-${random_id.kms_suffix.hex}"
+  kms_key_id = aws_kms_key.secrets_key.arn
+}
+
+resource "aws_secretsmanager_secret_version" "db_password" {
+  secret_id     = aws_secretsmanager_secret.db_password.id
+  secret_string = random_password.db_password.result
+}
+
 
 # VPC
 resource "aws_vpc" "main_vpc" {
@@ -140,19 +249,19 @@ resource "aws_security_group" "app_sg" {
   description = "Allow web traffic and SSH"
   vpc_id      = aws_vpc.main_vpc.id
 
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+  # ingress {
+  #   from_port   = 22
+  #   to_port     = 22
+  #   protocol    = "tcp"
+  #   cidr_blocks = ["0.0.0.0/0"]
+  # }
 
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+  # ingress {
+  #   from_port   = 80
+  #   to_port     = 80
+  #   protocol    = "tcp"
+  #   cidr_blocks = ["0.0.0.0/0"]
+  # }
 
   ingress {
     from_port   = 443
@@ -162,10 +271,10 @@ resource "aws_security_group" "app_sg" {
   }
 
   ingress {
-    from_port   = 8080
-    to_port     = 8080
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port       = 8080
+    to_port         = 8080
+    protocol        = "tcp"
+    security_groups = [aws_security_group.load_balancer_sg.id]
   }
 
   egress {
@@ -225,37 +334,59 @@ resource "aws_iam_role" "ec2_s3_cloudwatch_access_role" {
 # IAM Policy for S3 Access
 resource "aws_iam_policy" "s3_cloudwatch_access_policy" {
   name        = "s3-access-policy"
-  description = "Policy to allow access to S3 bucket"
+  description = "Policy to allow access to S3 bucket and KMS"
   policy = jsonencode({
-    Version = "2012-10-17"
+    Version = "2012-10-17",
     Statement = [
       {
-        Effect = "Allow"
+        Effect = "Allow",
         Action = [
           "s3:PutObject",
           "s3:GetObject",
           "s3:DeleteObject",
           "s3:GetBucketPolicy"
+        ],
+        Resource = [
+          "arn:aws:s3:::${aws_s3_bucket.webapp_bucket.bucket}",
+          "arn:aws:s3:::${aws_s3_bucket.webapp_bucket.bucket}/*"
         ]
-        Resource = "arn:aws:s3:::${aws_s3_bucket.webapp_bucket.bucket}/*"
       },
       {
-        Effect   = "Allow"
-        Action   = "s3:GetBucketPolicy"
-        Resource = "arn:aws:s3:::${aws_s3_bucket.webapp_bucket.bucket}"
+        Effect = "Allow",
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:GenerateDataKey"
+        ],
+        Resource = [
+          aws_kms_key.s3_key.arn,
+          aws_kms_key.secrets_key.arn
+        ]
+      },
+      {
+        Effect   = "Allow",
+        Action   = "secretsmanager:GetSecretValue",
+        Resource = aws_secretsmanager_secret.db_password.arn
       },
       {
         Effect = "Allow",
         Action = [
           "cloudwatch:PutMetricData",
-          "cloudwatch:GetMetricStatistics",
-          "cloudwatch:ListMetrics",
           "logs:CreateLogGroup",
           "logs:CreateLogStream",
-          "logs:PutLogEvents",
-          "logs:DescribeLogStreams",
+          "logs:PutLogEvents"
         ],
         Resource = "*"
+      },
+      {
+        Effect = "Allow",
+        Action = [
+          "kms:Decrypt",
+          "kms:GenerateDataKey",
+          "kms:CreateGrant",
+          "kms:DescribeKey"
+        ],
+        Resource = aws_kms_key.ec2_key.arn
       }
     ]
   })
@@ -283,7 +414,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "webapp_bucket_enc
   bucket = aws_s3_bucket.webapp_bucket.id
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      kms_master_key_id = aws_kms_key.s3_key.arn
+      sse_algorithm     = "aws:kms"
     }
   }
 }
@@ -301,48 +433,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "bucket_lifecycle" {
     }
   }
 }
-
-# EC2 Instance with IAM Instance Profile
-# resource "aws_instance" "app_instance" {
-#   ami                         = var.aws_ami_id
-#   instance_type               = var.aws_instance_type
-#   vpc_security_group_ids      = [aws_security_group.app_sg.id]
-#   subnet_id                   = aws_subnet.public_subnet_a.id
-#   associate_public_ip_address = true
-#   key_name                    = var.aws_key_name
-#   iam_instance_profile        = aws_iam_instance_profile.ec2_s3_access_profile.name
-
-#   user_data = <<-EOF
-#               #!/bin/bash
-#               cat > /opt/csye6225/webapp/.env << EOL
-#               DB_HOST=${aws_db_instance.webapp_db.endpoint}
-#               DB_USER=${var.DB_USER}
-#               DB_PASSWORD=${var.DB_PASSWORD}
-#               DB_NAME=${var.DB_NAME}
-#               DB_URI=postgresql://${var.DB_USER}:${var.DB_PASSWORD}@${aws_db_instance.webapp_db.endpoint}/${var.DB_NAME}
-#               S3_BUCKET_NAME=${aws_s3_bucket.webapp_bucket.bucket}
-#               S3_REGION=${var.region}
-#               EOL
-#               sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
-#               -a fetch-config \
-#               -m ec2 \
-#               -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
-#               sudo systemctl start amazon-cloudwatch-agent
-#               sudo systemctl enable amazon-cloudwatch-agent
-#               systemctl enable csye6225-flask-webapp.service
-#               sudo systemctl restart csye6225-flask-webapp.service
-#               EOF
-
-#   root_block_device {
-#     volume_size           = var.aws_volume_size
-#     volume_type           = var.aws_volume_type
-#     delete_on_termination = true
-#   }
-
-#   tags = {
-#     Name = "csye6225-flask-webapp-instance"
-#   }
-# }
 
 # Load Balancer
 resource "aws_lb" "web_app_lb" {
@@ -375,20 +465,20 @@ resource "aws_lb_target_group" "web_app_tg" {
   }
 }
 
-resource "aws_lb_listener" "web_app_listener" {
-  load_balancer_arn = aws_lb.web_app_lb.arn
-  port              = "80"
-  protocol          = "HTTP"
+# resource "aws_lb_listener" "web_app_listener" {
+#   load_balancer_arn = aws_lb.web_app_lb.arn
+#   port              = "80"
+#   protocol          = "HTTP"
 
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.web_app_tg.arn
-  }
-}
+#   default_action {
+#     type             = "forward"
+#     target_group_arn = aws_lb_target_group.web_app_tg.arn
+#   }
+# }
 
 # Launch Template (using your exact user_data format)
 resource "aws_launch_template" "web_app_lt" {
-  name_prefix   = "csye6225-web-app-"
+  name          = "csye6225-web-app-template"
   image_id      = var.aws_ami_id
   instance_type = var.aws_instance_type
   key_name      = var.aws_key_name
@@ -408,19 +498,31 @@ resource "aws_launch_template" "web_app_lt" {
       volume_size           = var.aws_volume_size
       volume_type           = var.aws_volume_type
       delete_on_termination = true
+      encrypted             = true
+      kms_key_id            = aws_kms_key.ec2_key.arn
     }
   }
 
   user_data = base64encode(<<-EOF
               #!/bin/bash
-              cat > /opt/csye6225/webapp/.env << EOL
-              DB_HOST=${aws_db_instance.webapp_db.endpoint}
-              DB_USER=${var.DB_USER}
-              DB_PASSWORD=${var.DB_PASSWORD}
-              DB_NAME=${var.DB_NAME}
-              DB_URI=postgresql://${var.DB_USER}:${var.DB_PASSWORD}@${aws_db_instance.webapp_db.endpoint}/${var.DB_NAME}
-              S3_BUCKET_NAME=${aws_s3_bucket.webapp_bucket.bucket}
-              S3_REGION=${var.region}
+              # Install AWS CLI (if not already present)
+              if ! command -v aws &> /dev/null; then
+                apt-get update
+              fi
+
+              # Retrieve DB password from Secrets Manager
+              DB_PASSWORD=$(aws secretsmanager get-secret-value \
+                --secret-id ${aws_secretsmanager_secret.db_password.name} \
+                --query SecretString \
+                --output text)
+                cat > /opt/csye6225/webapp/.env << EOL
+                DB_HOST=${aws_db_instance.webapp_db.endpoint}
+                DB_USER=${var.DB_USER}
+                DB_PASSWORD=$DB_PASSWORD
+                DB_NAME=${var.DB_NAME}
+                DB_URI=postgresql://${var.DB_USER}:$DB_PASSWORD@${aws_db_instance.webapp_db.endpoint}/${var.DB_NAME}
+                S3_BUCKET_NAME=${aws_s3_bucket.webapp_bucket.bucket}
+                S3_REGION=${var.region}
               EOL
               sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
               -a fetch-config \
@@ -446,7 +548,12 @@ resource "aws_autoscaling_group" "web_app_asg" {
     aws_subnet.public_subnet_b.id,
     aws_subnet.public_subnet_c.id
   ]
-
+  instance_refresh {
+    strategy = "Rolling"
+    preferences {
+      min_healthy_percentage = 50
+    }
+  }
   launch_template {
     id      = aws_launch_template.web_app_lt.id
     version = "$Latest"
@@ -530,8 +637,10 @@ resource "aws_db_instance" "webapp_db" {
   instance_class         = "db.t3.micro"
   allocated_storage      = 20
   storage_type           = "gp2"
+  storage_encrypted      = true
+  kms_key_id             = aws_kms_key.rds_key.arn
   username               = var.DB_USER
-  password               = var.DB_PASSWORD
+  password               = random_password.db_password.result
   db_name                = var.DB_NAME
   publicly_accessible    = false
   skip_final_snapshot    = true
@@ -580,5 +689,57 @@ resource "aws_route53_record" "web_app" {
     name                   = aws_lb.web_app_lb.dns_name
     zone_id                = aws_lb.web_app_lb.zone_id
     evaluate_target_health = true
+  }
+}
+# Development Certificate (ACM)
+resource "aws_acm_certificate" "dev_cert" {
+  count             = var.aws_profile == "dev" ? 1 : 0
+  domain_name       = "${var.subdomain}.${var.domain_name}"
+  validation_method = "DNS"
+
+  tags = {
+    Name        = "dev-certificate"
+    Environment = "dev"
+    Assignment  = "csye6225"
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+# Route53 validation record for dev certificate
+resource "aws_route53_record" "dev_cert_validation" {
+  count = var.aws_profile == "dev" ? 1 : 0
+
+  allow_overwrite = true
+  name            = tolist(aws_acm_certificate.dev_cert[0].domain_validation_options)[0].resource_record_name
+  records         = [tolist(aws_acm_certificate.dev_cert[0].domain_validation_options)[0].resource_record_value]
+  ttl             = 60
+  type            = tolist(aws_acm_certificate.dev_cert[0].domain_validation_options)[0].resource_record_type
+  zone_id         = data.aws_route53_zone.selected.zone_id
+}
+
+# Certificate validation
+resource "aws_acm_certificate_validation" "dev_cert_validation" {
+  count = var.aws_profile == "dev" ? 1 : 0
+
+  certificate_arn         = aws_acm_certificate.dev_cert[0].arn
+  validation_record_fqdns = [aws_route53_record.dev_cert_validation[0].fqdn]
+}
+
+resource "aws_lb_listener" "https" {
+  load_balancer_arn = aws_lb.web_app_lb.arn # Your ALB's ARN
+  port              = 443
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-2016-08" # AWS-recommended policy
+  certificate_arn = var.aws_profile == "dev" ? (
+    aws_acm_certificate_validation.dev_cert_validation[0].certificate_arn
+    ) : (
+    var.demo_certificate_arn
+  )
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.web_app_tg.arn # Your target group
   }
 }
